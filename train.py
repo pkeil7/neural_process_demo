@@ -131,6 +131,7 @@ def train(
     optimizer,
     device,
     num_epochs,
+    config,
     save_dir='checkpoints',
     save_every=10,
     model_name='best_model.pt'
@@ -182,8 +183,9 @@ def train(
                 'optimizer_state_dict': optimizer.state_dict(),
                 'train_loss': train_loss,
                 'val_loss': val_loss,
+                'config': config,
             }, os.path.join(save_dir, model_name))
-            print(f"  → Saved best model (val_loss: {val_loss:.6f})")
+            print(f"  → Saved best model (val_loss: {val_loss:.6f}) as {model_name}")
         
         # Save periodic checkpoint
         if epoch % save_every == 0:
@@ -193,7 +195,9 @@ def train(
                 'optimizer_state_dict': optimizer.state_dict(),
                 'train_loss': train_loss,
                 'val_loss': val_loss,
+                'config': config,
             }, os.path.join(save_dir, f'checkpoint_epoch_{epoch}.pt'))
+            print(f"  → Saved checkpoint for epoch {epoch} as checkpoint_epoch_{epoch}.pt")
     
     print("-" * 60)
     print(f"Training complete! Best validation loss: {best_val_loss:.6f}")

@@ -39,7 +39,6 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
     # Determine image dimensions (assuming 28x28 for MNIST)
     # Coordinates are normalized to [0, 1], so scale back
     img_h, img_w = 28, 28
-    #img_h, img_w = 1, 1
     
     # Create figure
     if model is not None:
@@ -51,8 +50,8 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
     context_img = np.zeros((img_h, img_w))
     for (x_coord, y_coord), val in zip(x_context, y_context):
         # Convert normalized coordinates back to pixel indices
-        px = int(x_coord)
-        py = int(y_coord)
+        px = int(x_coord * img_w)
+        py = int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
             context_img[py, px] = val[0]
     
@@ -63,8 +62,8 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
     # 2. Plot target points (ground truth)
     target_img = np.zeros((img_h, img_w))
     for (x_coord, y_coord), val in zip(x_target, y_target):
-        px = int(x_coord )
-        py = int(y_coord )
+        px = int(x_coord * img_w)
+        py = int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
             target_img[py, px] = val[0]
     
@@ -97,8 +96,8 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
         # Plot predictions
         pred_img = np.copy(context_img)  # Start with context
         for (x_coord, y_coord), val in zip(x_target, mean):
-            px = int(x_coord )
-            py = int(y_coord )
+            px = int(x_coord * img_w)
+            py = int(y_coord * img_h)
             if 0 <= px < img_w and 0 <= py < img_h:
                 pred_img[py, px] = val[0]
         
@@ -161,28 +160,28 @@ def plot_prediction_comparison(batch, batch_idx=0, model=None, device='cpu', sav
     # Context only
     context_img = np.zeros((img_h, img_w))
     for (x_coord, y_coord), val in zip(x_context, y_context):
-        px, py = int(x_coord), int(y_coord)
+        px, py = int(x_coord * img_w), int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
             context_img[py, px] = val[0]
     
     # Ground truth (context + target)
     gt_img = np.copy(context_img)
     for (x_coord, y_coord), val in zip(x_target, y_target):
-        px, py = int(x_coord), int(y_coord)
+        px, py = int(x_coord * img_w), int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
             gt_img[py, px] = val[0]
     
     # Prediction (context + predicted target)
     pred_img = np.copy(context_img)
     for (x_coord, y_coord), val in zip(x_target, mean):
-        px, py = int(x_coord), int(y_coord)
+        px, py = int(x_coord * img_w), int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
             pred_img[py, px] = val[0]
     
     # Uncertainty map
     uncertainty_img = np.zeros((img_h, img_w))
     for (x_coord, y_coord), var in zip(x_target, variance):
-        px, py = int(x_coord), int(y_coord)
+        px, py = int(x_coord * img_w), int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
             uncertainty_img[py, px] = np.sqrt(var[0])  # standard deviation
     
@@ -258,7 +257,7 @@ def visualize_training_batch(dataloader, model=None, device='cpu', num_samples=4
         # Context image
         context_img = np.zeros((img_h, img_w))
         for (x_coord, y_coord), val in zip(x_context, y_context):
-            px, py = int(x_coord * img_w), int(y_coord)
+            px, py = int(x_coord * img_w), int(y_coord * img_h)
             if 0 <= px < img_w and 0 <= py < img_h:
                 context_img[py, px] = val[0]
         
@@ -270,7 +269,7 @@ def visualize_training_batch(dataloader, model=None, device='cpu', num_samples=4
         # Target ground truth
         target_img = np.zeros((img_h, img_w))
         for (x_coord, y_coord), val in zip(x_target, y_target):
-            px, py = int(x_coord * img_w), int(y_coord)
+            px, py = int(x_coord * img_w), int(y_coord * img_h)
             if 0 <= px < img_w and 0 <= py < img_h:
                 target_img[py, px] = val[0]
         
@@ -300,7 +299,7 @@ def visualize_training_batch(dataloader, model=None, device='cpu', num_samples=4
             
             pred_img = np.copy(context_img)
             for (x_coord, y_coord), val in zip(x_target, mean):
-                px, py = int(x_coord * img_w), int(y_coord)
+                px, py = int(x_coord * img_w), int(y_coord * img_h)
                 if 0 <= px < img_w and 0 <= py < img_h:
                     pred_img[py, px] = val[0]
             
@@ -396,3 +395,21 @@ def load_model_from_checkpoint(checkpoint_path, input_dim_x, input_dim_y, hidden
         print(f"  Val Loss: {checkpoint_info['val_loss']:.6f}")
     
     return model, checkpoint_info
+
+
+def load_model_info_from_checkpoint(checkpoint_path,):
+    """
+    Load only the training information from a checkpoint without the model weights.
+    
+    Args:
+        checkpoint_path: Path to the checkpoint file (e.g., 'checkpoints/best_model.pt')
+        device: Device to load on ('cpu' or 'cuda')
+    """
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    
+    config = checkpoint.get('config', None)
+    if config is not None:
+        return config
+    else :
+        print(f"No config found in checkpoint {checkpoint_path}")
+        return None

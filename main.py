@@ -1,8 +1,11 @@
+from time import time
+
 import torch
 import torch.optim as optim
 import numpy as np
 from model import NP_model
 from dataset import get_image_dataloader
+from train import train
 
 
 
@@ -12,18 +15,22 @@ def main():
     # Configuration
     config = {
         'dataset': 'mnist',           # 'mnist' or 'cifar10'
-        'max_context_points': 392,  # For MNIST (28x28=784), recommend ~392 (50% of pixels)
-        'batch_size': 16,
+        'max_context_points': 261,  # For MNIST (28x28=784), recommend ~392 (50% of pixels)
+        'batch_size': 32,
         'num_workers': 4,
         'input_dim_x': 2,             # 2D coordinates (x, y)
         'input_dim_y': 1,             # Grayscale (1 for MNIST, 3 for CIFAR10)
-        'hidden_dim': 128,
+        'hidden_dim': 128*3,
         'output_dim': 1,              # Prediction dimension (1 for MNIST, 3 for CIFAR10)
-        'learning_rate': 1e-3,
+        'learning_rate': 5e-4,
         'num_epochs': 50,
         'save_every': 10,
         'seed': 42,
     }
+
+    import time
+    timestamp = time.strftime("%d_%b_%Y_%H:%M:%S", time.localtime())
+    model_name = f"NP_model_{timestamp}.pt"
     
     # Set random seed for reproducibility
     torch.manual_seed(config['seed'])
@@ -40,7 +47,7 @@ def main():
         batch_size=config['batch_size'],
         num_workers=config['num_workers'],
         train=True,
-        flatten=False
+        flatten=True
     )
     
     val_loader = get_image_dataloader(
@@ -49,7 +56,7 @@ def main():
         batch_size=config['batch_size'],
         num_workers=config['num_workers'],
         train=False,
-        flatten=False
+        flatten=True
     )
     
     # Create model
@@ -67,7 +74,7 @@ def main():
     print(f"Model has {num_params:,} trainable parameters")
     
     # Create optimizer
-    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
+    optimizer = optim.AdamW(model.parameters(), lr=config['learning_rate'])
     
     # Train
     print("\n" + "=" * 60)
@@ -78,8 +85,10 @@ def main():
         optimizer=optimizer,
         device=device,
         num_epochs=config['num_epochs'],
+        config=config,
         save_dir='checkpoints',
-        save_every=config['save_every']
+        save_every=config['save_every'],
+        model_name=model_name
     )
     
     # Save training history

@@ -65,7 +65,7 @@ class ImageDataset(Dataset):
         # Create coordinate grid
         # Flatten image to 1D
         num_pixels = h * w
-        xx, yy = np.meshgrid(np.arange(w), np.arange(h))
+        xx, yy = np.meshgrid(np.arange(w)/w, np.arange(h)/h)
         x = np.stack([xx, yy], axis=-1).reshape(-1, 2).astype(np.float32)
         if self.flatten:
             y = image.reshape(-1, c).astype(np.float32)
