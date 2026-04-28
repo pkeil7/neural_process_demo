@@ -28,7 +28,9 @@ def gaussian_nll_loss(mean, variance, target, target_mask=None):
     """
     # Gaussian NLL: 0.5 * (log(var) + (y - mean)^2 / var + log(2π))
     # We can drop the constant log(2π) term
-    nll = 0.5 * (torch.log(variance) + (target - mean) ** 2 / variance)
+    # Clamp variance to prevent log(0) issues
+    variance_safe = torch.clamp(variance, min=1e-6)
+    nll = 0.5 * (torch.log(variance_safe) + (target - mean) ** 2 / variance_safe)
     
     if target_mask is not None:
         # Apply mask and compute mean over valid targets only

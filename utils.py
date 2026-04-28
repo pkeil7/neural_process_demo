@@ -10,6 +10,8 @@ from model import NP_model
 def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
     """
     Plot context and target points for an MNIST sample from a batch.
+
+    This function assumes that the image coordinates are not normalised but are real pixel values
     
     Args:
         batch: Dictionary containing batch data from dataloader
@@ -37,6 +39,7 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
     # Determine image dimensions (assuming 28x28 for MNIST)
     # Coordinates are normalized to [0, 1], so scale back
     img_h, img_w = 28, 28
+    #img_h, img_w = 1, 1
     
     # Create figure
     if model is not None:
@@ -48,8 +51,8 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
     context_img = np.zeros((img_h, img_w))
     for (x_coord, y_coord), val in zip(x_context, y_context):
         # Convert normalized coordinates back to pixel indices
-        px = int(x_coord * img_w)
-        py = int(y_coord * img_h)
+        px = int(x_coord)
+        py = int(y_coord)
         if 0 <= px < img_w and 0 <= py < img_h:
             context_img[py, px] = val[0]
     
@@ -60,8 +63,8 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
     # 2. Plot target points (ground truth)
     target_img = np.zeros((img_h, img_w))
     for (x_coord, y_coord), val in zip(x_target, y_target):
-        px = int(x_coord * img_w)
-        py = int(y_coord * img_h)
+        px = int(x_coord )
+        py = int(y_coord )
         if 0 <= px < img_w and 0 <= py < img_h:
             target_img[py, px] = val[0]
     
@@ -94,8 +97,8 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
         # Plot predictions
         pred_img = np.copy(context_img)  # Start with context
         for (x_coord, y_coord), val in zip(x_target, mean):
-            px = int(x_coord * img_w)
-            py = int(y_coord * img_h)
+            px = int(x_coord )
+            py = int(y_coord )
             if 0 <= px < img_w and 0 <= py < img_h:
                 pred_img[py, px] = val[0]
         
@@ -111,6 +114,8 @@ def plot_prediction_comparison(batch, batch_idx=0, model=None, device='cpu', sav
     """
     Detailed comparison plot showing context, target, and prediction side by side.
     
+    This function assumes that the image coordinates are not normalised but are real pixel values
+
     Args:
         batch: Dictionary containing batch data from dataloader
         batch_idx: Index of sample in the batch to visualize
@@ -156,28 +161,28 @@ def plot_prediction_comparison(batch, batch_idx=0, model=None, device='cpu', sav
     # Context only
     context_img = np.zeros((img_h, img_w))
     for (x_coord, y_coord), val in zip(x_context, y_context):
-        px, py = int(x_coord * img_w), int(y_coord * img_h)
+        px, py = int(x_coord), int(y_coord)
         if 0 <= px < img_w and 0 <= py < img_h:
             context_img[py, px] = val[0]
     
     # Ground truth (context + target)
     gt_img = np.copy(context_img)
     for (x_coord, y_coord), val in zip(x_target, y_target):
-        px, py = int(x_coord * img_w), int(y_coord * img_h)
+        px, py = int(x_coord), int(y_coord)
         if 0 <= px < img_w and 0 <= py < img_h:
             gt_img[py, px] = val[0]
     
     # Prediction (context + predicted target)
     pred_img = np.copy(context_img)
     for (x_coord, y_coord), val in zip(x_target, mean):
-        px, py = int(x_coord * img_w), int(y_coord * img_h)
+        px, py = int(x_coord), int(y_coord)
         if 0 <= px < img_w and 0 <= py < img_h:
             pred_img[py, px] = val[0]
     
     # Uncertainty map
     uncertainty_img = np.zeros((img_h, img_w))
     for (x_coord, y_coord), var in zip(x_target, variance):
-        px, py = int(x_coord * img_w), int(y_coord * img_h)
+        px, py = int(x_coord), int(y_coord)
         if 0 <= px < img_w and 0 <= py < img_h:
             uncertainty_img[py, px] = np.sqrt(var[0])  # standard deviation
     
@@ -253,7 +258,7 @@ def visualize_training_batch(dataloader, model=None, device='cpu', num_samples=4
         # Context image
         context_img = np.zeros((img_h, img_w))
         for (x_coord, y_coord), val in zip(x_context, y_context):
-            px, py = int(x_coord * img_w), int(y_coord * img_h)
+            px, py = int(x_coord * img_w), int(y_coord)
             if 0 <= px < img_w and 0 <= py < img_h:
                 context_img[py, px] = val[0]
         
@@ -265,7 +270,7 @@ def visualize_training_batch(dataloader, model=None, device='cpu', num_samples=4
         # Target ground truth
         target_img = np.zeros((img_h, img_w))
         for (x_coord, y_coord), val in zip(x_target, y_target):
-            px, py = int(x_coord * img_w), int(y_coord * img_h)
+            px, py = int(x_coord * img_w), int(y_coord)
             if 0 <= px < img_w and 0 <= py < img_h:
                 target_img[py, px] = val[0]
         
@@ -295,7 +300,7 @@ def visualize_training_batch(dataloader, model=None, device='cpu', num_samples=4
             
             pred_img = np.copy(context_img)
             for (x_coord, y_coord), val in zip(x_target, mean):
-                px, py = int(x_coord * img_w), int(y_coord * img_h)
+                px, py = int(x_coord * img_w), int(y_coord)
                 if 0 <= px < img_w and 0 <= py < img_h:
                     pred_img[py, px] = val[0]
             

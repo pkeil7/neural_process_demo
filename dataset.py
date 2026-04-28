@@ -18,9 +18,9 @@ class ImageDataset(Dataset):
         flatten: bool, whether to flatten images to 1D or keep as 2D coordinates
     """
     
-    def __init__(self, dataset, context_ratio=None, max_context_points=None, flatten=False):
+    def __init__(self, dataset, context_ratio=None, max_context_points=None, flatten=True):
         self.dataset = dataset
-        self.context_ratio = context_ratio
+        self.context_ratio = context_ratio # probably not needed, can be removed?
         self.max_context_points = max_context_points
         self.flatten = flatten
         image, _ = self.dataset[0]
@@ -39,6 +39,15 @@ class ImageDataset(Dataset):
         self.w = w
         self.c = c
 
+        if self.max_context_points is not None:
+            assert max_context_points <= h*w, "max_context_points must be less than total pixels"
+            self.max_context_points = max_context_points
+            print("Using max_context_points:", self.max_context_points)
+        else :
+            self.max_context_points = h*w//2
+            print("Using default max_context_points = 50% of total pixels:", self.max_context_points)
+
+
     def __len__(self):
         return len(self.dataset)
     
@@ -54,19 +63,14 @@ class ImageDataset(Dataset):
             image = image.astype(np.float32)
         
         # Create coordinate grid
+        # Flatten image to 1D
+        num_pixels = h * w
+        xx, yy = np.meshgrid(np.arange(w), np.arange(h))
+        x = np.stack([xx, yy], axis=-1).reshape(-1, 2).astype(np.float32)
         if self.flatten:
-            # Flatten image to 1D
-            num_pixels = h * w * c
-            x = np.arange(num_pixels).reshape(-1, 1).astype(np.float32)
-            y = image.flatten().astype(np.float32)
-        else:
-            # Use 2D spatial coordinates for each pixel
-            xx, yy = np.meshgrid(np.arange(w), np.arange(h))
-            x = np.stack([xx, yy], axis=-1).reshape(-1, 2).astype(np.float32)
-            # Normalize coordinates to [0, 1]
-            x[:, 0] /= w
-            x[:, 1] /= h
             y = image.reshape(-1, c).astype(np.float32)
+        else:
+            y = image.reshape(h, w, c).astype(np.float32)
         
         num_pixels = len(x)
         if self.context_ratio is not None:
@@ -74,14 +78,7 @@ class ImageDataset(Dataset):
             # Randomly split into context and target based on context_ratio
             num_context = int(num_pixels * self.context_ratio)
         else:
-            # Default to random split
-            if self.max_context_points is not None:
-                assert self.max_context_points <= num_pixels, "max_context_points must be less than total pixels"
-                num_context = np.random.randint(1, self.max_context_points)
-            else:
-                num_context = np.random.randint(1, num_pixels)
-        
-
+            num_context = np.random.randint(1, self.max_context_points)
         
         indices = np.random.permutation(num_pixels)
         context_indices = indices[:num_context]
@@ -93,8 +90,8 @@ class ImageDataset(Dataset):
         y_target = torch.from_numpy(y[target_indices])
         
         return {
-            'x_context': x_context,
-            'y_context': y_context,
+            'x_context': x_context, # if flatten=True [batch, n_context, coords (usually 2)]
+            'y_context': y_context, # if flatten=True [batch, n_context, channel (1 for MNIST, 3 for CIFAR10)]
             'x_target': x_target,
             'y_target': y_target
         }
@@ -120,10 +117,11 @@ def neural_process_collate_fn(batch):
     # Find max lengths in this batch
     max_context = max(item['x_context'].size(0) for item in batch)
     max_target = max(item['x_target'].size(0) for item in batch)
+    #print(max_context, max_target)
     
     batch_size = len(batch)
-    x_dim = batch[0]['x_context'].size(-1)
-    y_dim = batch[0]['y_context'].size(-1)
+    x_dim = batch[0]['x_context'].size(-1) # coord dimension (usually 2)
+    y_dim = batch[0]['y_context'].size(-1) # channel dimension (1 for MNIST, 3 for CIFAR10)
     
     # Initialize padded tensors
     x_context_padded = torch.zeros(batch_size, max_context, x_dim)
@@ -158,8 +156,8 @@ def neural_process_collate_fn(batch):
     }
 
 
-def get_image_dataloader(dataset_name='mnist', context_ratio=0.5, max_context_points=None,
-                         batch_size=32, num_workers=0, train=True, flatten=False, **kwargs):
+def get_image_dataloader(dataset_name='mnist', context_ratio=None, max_context_points=None,
+                         batch_size=32, num_workers=0, train=True, flatten=True, **kwargs):
     """
     Create a DataLoader for image datasets.
     

@@ -71,6 +71,9 @@ class LinearDecoder(nn.Module):
         #self.fc3 = nn.Linear(hidden_dim, hidden_dim)
         self.fc_mean = nn.Linear(hidden_dim, output_dim)
         self.fc_var = nn.Linear(hidden_dim, output_dim)
+        
+        # Initialize variance head to output log(0.1) initially for reasonable starting variance
+        self.fc_var.bias.data.fill_(-2.3)  # log(0.1) ≈ -2.3
 
     def forward(self, z, x_target):
         # z shape: [batch, latent_dim]
@@ -80,7 +83,6 @@ class LinearDecoder(nn.Module):
         batch_size = x_target.size(0)
         n_target = x_target.size(1)
         z_expanded = z.unsqueeze(1).expand(batch_size, n_target, -1)  # [batch, n_target, latent_dim]
-        
         # Concatenate z with each target point
         zx = torch.cat([z_expanded, x_target], dim=-1)  # [batch, n_target, latent_dim + input_dim_x]
         
@@ -88,5 +90,11 @@ class LinearDecoder(nn.Module):
         h = torch.relu(self.fc2(h))
         #h = torch.relu(self.fc3(h))
         mean = self.fc_mean(h)  # [batch, n_target, output_dim]
-        variance = torch.exp(self.fc_var(h))  # [batch, n_target, output_dim]
+        
+        # Compute variance with minimum bound to prevent collapse
+        log_var = self.fc_var(h)
+        # Clamp log variance to prevent extreme values
+        log_var = torch.clamp(log_var, min=-7, max=7)  # variance ∈ [~0.001, ~1000]
+        variance = torch.exp(log_var) + 1e-3  # Add minimum variance of 0.001
+        
         return mean, variance
