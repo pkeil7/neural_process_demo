@@ -45,8 +45,8 @@ class NP_model(nn.Module):
 class LinearEncoder(nn.Module):
     def __init__(self, input_dim_x, input_dim_y, hidden_dim, latent_dim):
         super(LinearEncoder, self).__init__()
-        self.x_enc = nn.Linear(input_dim_x, 16)
-        self.fc1 = nn.Linear(16 + input_dim_y, hidden_dim)
+        self.x_enc = nn.Linear(input_dim_x, 4)
+        self.fc1 = nn.Linear(4 + input_dim_y, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         #self.fc3 = nn.Linear(hidden_dim, hidden_dim)
         #self.fc4 = nn.Linear(hidden_dim, latent_dim)

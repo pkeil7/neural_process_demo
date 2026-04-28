@@ -47,15 +47,16 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     
     # 1. Plot context points (sparse observations)
-    context_img = np.zeros((img_h, img_w))
+    context_img = np.full((img_h, img_w, 4), [0.0, 0.0, 1.0, 1.0], dtype=np.float32)  # Blue RGBA background
     for (x_coord, y_coord), val in zip(x_context, y_context):
         # Convert normalized coordinates back to pixel indices
         px = int(x_coord * img_w)
         py = int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
-            context_img[py, px] = val[0]
+            v = val[0]
+            context_img[py, px] = [v, v, v, 1.0]  # Grayscale pixel over blue background
     
-    axes[0].imshow(context_img, cmap='gray', vmin=0, vmax=1)
+    axes[0].imshow(context_img)
     axes[0].set_title(f'Context Points (n={n_context})')
     axes[0].axis('off')
     
@@ -72,7 +73,15 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
     axes[1].axis('off')
     
     # 3. Plot full image (context + target)
-    full_img = context_img + target_img
+    full_img = np.zeros((img_h, img_w))
+    for (x_coord, y_coord), val in zip(x_context, y_context):
+        px, py = int(x_coord * img_w), int(y_coord * img_h)
+        if 0 <= px < img_w and 0 <= py < img_h:
+            full_img[py, px] = val[0]
+    for (x_coord, y_coord), val in zip(x_target, y_target):
+        px, py = int(x_coord * img_w), int(y_coord * img_h)
+        if 0 <= px < img_w and 0 <= py < img_h:
+            full_img[py, px] = val[0]
     axes[2].imshow(full_img, cmap='gray', vmin=0, vmax=1)
     axes[2].set_title('Complete Image')
     axes[2].axis('off')
@@ -93,8 +102,12 @@ def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
             # Extract and apply target mask
             mean = mean[0, :n_target].cpu().numpy()
         
-        # Plot predictions
-        pred_img = np.copy(context_img)  # Start with context
+        # Plot predictions: start with context pixels in grayscale
+        pred_img = np.zeros((img_h, img_w))
+        for (x_coord, y_coord), val in zip(x_context, y_context):
+            px, py = int(x_coord * img_w), int(y_coord * img_h)
+            if 0 <= px < img_w and 0 <= py < img_h:
+                pred_img[py, px] = val[0]
         for (x_coord, y_coord), val in zip(x_target, mean):
             px = int(x_coord * img_w)
             py = int(y_coord * img_h)
@@ -157,22 +170,31 @@ def plot_prediction_comparison(batch, batch_idx=0, model=None, device='cpu', sav
     # Reconstruct images
     img_h, img_w = 28, 28
     
-    # Context only
-    context_img = np.zeros((img_h, img_w))
+    # Context only (blue background with grayscale context pixels)
+    context_img = np.full((img_h, img_w, 4), [0.0, 0.0, 1.0, 1.0], dtype=np.float32)
     for (x_coord, y_coord), val in zip(x_context, y_context):
         px, py = int(x_coord * img_w), int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
-            context_img[py, px] = val[0]
+            v = val[0]
+            context_img[py, px] = [v, v, v, 1.0]
     
     # Ground truth (context + target)
-    gt_img = np.copy(context_img)
+    gt_img = np.zeros((img_h, img_w))
+    for (x_coord, y_coord), val in zip(x_context, y_context):
+        px, py = int(x_coord * img_w), int(y_coord * img_h)
+        if 0 <= px < img_w and 0 <= py < img_h:
+            gt_img[py, px] = val[0]
     for (x_coord, y_coord), val in zip(x_target, y_target):
         px, py = int(x_coord * img_w), int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
             gt_img[py, px] = val[0]
     
     # Prediction (context + predicted target)
-    pred_img = np.copy(context_img)
+    pred_img = np.zeros((img_h, img_w))
+    for (x_coord, y_coord), val in zip(x_context, y_context):
+        px, py = int(x_coord * img_w), int(y_coord * img_h)
+        if 0 <= px < img_w and 0 <= py < img_h:
+            pred_img[py, px] = val[0]
     for (x_coord, y_coord), val in zip(x_target, mean):
         px, py = int(x_coord * img_w), int(y_coord * img_h)
         if 0 <= px < img_w and 0 <= py < img_h:
@@ -186,24 +208,25 @@ def plot_prediction_comparison(batch, batch_idx=0, model=None, device='cpu', sav
             uncertainty_img[py, px] = np.sqrt(var[0])  # standard deviation
     
     # Create plot
-    fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
     
-    axes[0, 0].imshow(context_img, cmap='gray', vmin=0, vmax=1)
-    axes[0, 0].set_title(f'Context ({n_context} pixels, {n_context/(img_h*img_w)*100:.1f}%)')
-    axes[0, 0].axis('off')
+
+    axes[0].imshow(context_img)
+    axes[0].set_title(f'Context ({n_context} pixels, {n_context/(img_h*img_w)*100:.1f}%)')
+    axes[0].axis('off')
     
-    axes[0, 1].imshow(gt_img, cmap='gray', vmin=0, vmax=1)
-    axes[0, 1].set_title('Ground Truth')
-    axes[0, 1].axis('off')
+    axes[1].imshow(gt_img, cmap='gray', vmin=0, vmax=1)
+    axes[1].set_title('Ground Truth')
+    axes[1].axis('off')
     
-    axes[1, 0].imshow(pred_img, cmap='gray', vmin=0, vmax=1)
-    axes[1, 0].set_title('Model Prediction')
-    axes[1, 0].axis('off')
+    axes[2].imshow(pred_img, cmap='gray', vmin=0, vmax=1)
+    axes[2].set_title('Model Prediction')
+    axes[2].axis('off')
     
-    im = axes[1, 1].imshow(uncertainty_img, cmap='hot', vmin=0, vmax=0.5)
-    axes[1, 1].set_title('Prediction Uncertainty (σ)')
-    axes[1, 1].axis('off')
-    plt.colorbar(im, ax=axes[1, 1], fraction=0.046)
+    im = axes[3].imshow(uncertainty_img, cmap='hot', vmin=0, vmax=0.5)
+    axes[3].set_title('Prediction Uncertainty (σ)')
+    axes[3].axis('off')
+    plt.colorbar(im, ax=axes[3], fraction=0.046)
     
     plt.tight_layout()
     
