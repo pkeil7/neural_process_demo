@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import math
 
 
 class NP_model(nn.Module):
@@ -98,3 +99,177 @@ class LinearDecoder(nn.Module):
         variance = torch.exp(log_var) + 1e-3  # Add minimum variance of 0.001
         
         return mean, variance
+
+
+# =============================================================================
+# ConvCNP: Convolutional Conditional Neural Process (Gordon et al., 2020)
+# =============================================================================
+
+class SetConvEncoder(nn.Module):
+    """
+    Set Convolution encoder: maps irregular (x, y) pairs to a regular grid
+    using RBF kernel weighting.
+    
+    Produces (y_dim + 1) channels: weighted signal channels + density channel.
+    Signal and density are NOT normalized — the downstream CNN learns to
+    interpret the density channel.
+    """
+    
+    def __init__(self, y_dim, grid_h, grid_w, init_lengthscale=0.1):
+        super(SetConvEncoder, self).__init__()
+        self.y_dim = y_dim
+        self.grid_h = grid_h
+        self.grid_w = grid_w
+        
+        # Learnable log-lengthscale for the RBF kernel
+        self.log_lengthscale = nn.Parameter(
+            torch.tensor(math.log(init_lengthscale), dtype=torch.float32)
+        )
+        
+        # Fixed grid coordinates matching dataset convention: arange(n)/n
+        yy, xx = torch.meshgrid(
+            torch.arange(grid_h, dtype=torch.float32) / grid_h,
+            torch.arange(grid_w, dtype=torch.float32) / grid_w,
+            indexing='ij'
+        )
+        grid = torch.stack([xx, yy], dim=-1)  # [H, W, 2] — (col/w, row/h)
+        self.register_buffer('grid', grid)
+    
+    def forward(self, x_context, y_context, context_mask=None):
+        """
+        Args:
+            x_context: [B, N, 2] context coordinates
+            y_context: [B, N, C] context values
+            context_mask: [B, N] optional mask (1=valid, 0=padding)
+        
+        Returns:
+            grid_repr: [B, C+1, H, W] grid with signal + density channels
+        """
+        batch_size = x_context.size(0)
+        
+        # Grid points flattened: [H*W, 2]
+        grid_flat = self.grid.reshape(-1, 2)
+        
+        # Pairwise squared distances: [B, H*W, N]
+        # grid_flat[None, :, None, :] → [1, H*W, 1, 2]
+        # x_context[:, None, :, :]   → [B, 1,   N, 2]
+        sq_dist = ((grid_flat[None, :, None, :] - x_context[:, None, :, :]) ** 2).sum(-1)
+        
+        lengthscale = torch.exp(self.log_lengthscale)
+        weights = torch.exp(-0.5 * sq_dist / (lengthscale ** 2))  # [B, H*W, N]
+        
+        if context_mask is not None:
+            weights = weights * context_mask.unsqueeze(1)  # mask out padded points
+        
+        # Signal channels: Σ w_i * y_i → [B, H*W, C]
+        signal = torch.bmm(weights, y_context)
+        
+        # Density channel: Σ w_i → [B, H*W, 1]
+        density = weights.sum(-1, keepdim=True)
+        
+        # Combine and reshape to [B, C+1, H, W]
+        grid_repr = torch.cat([signal, density], dim=-1)  # [B, H*W, C+1]
+        grid_repr = grid_repr.reshape(batch_size, self.grid_h, self.grid_w, -1)
+        grid_repr = grid_repr.permute(0, 3, 1, 2)  # [B, C+1, H, W]
+        
+        return grid_repr
+
+
+class ConvCNP(nn.Module):
+    """
+    Convolutional Conditional Neural Process (ConvCNP).
+    
+    SetConv encoder → CNN on grid → index predictions at target locations.
+    
+    For image tasks the targets lie on the pixel grid, so decoding is a
+    simple grid lookup (no SetConv decoder needed).
+    
+    Reference: Gordon et al. (2020) "Convolutional Conditional Neural Processes"
+    """
+    
+    def __init__(self, img_h, img_w, y_dim=1, hidden_channels=128,
+                 n_conv_layers=6, init_lengthscale=0.1):
+        super(ConvCNP, self).__init__()
+        self.img_h = img_h
+        self.img_w = img_w
+        self.y_dim = y_dim
+        
+        # SetConv encoder
+        self.encoder = SetConvEncoder(y_dim, img_h, img_w, init_lengthscale)
+        
+        # CNN: (y_dim + 1) → hidden → … → 2*y_dim  (mean + log_var)
+        layers = []
+        in_ch = y_dim + 1
+        for i in range(n_conv_layers):
+            layers.append(nn.Conv2d(in_ch, hidden_channels, kernel_size=5, padding=2))
+            layers.append(nn.ReLU())
+            in_ch = hidden_channels
+        layers.append(nn.Conv2d(hidden_channels, 2 * y_dim, kernel_size=1))
+        self.cnn = nn.Sequential(*layers)
+        
+        # Initialize final conv bias for log_var head to ≈ log(0.1)
+        final_conv = self.cnn[-1]
+        final_conv.bias.data[y_dim:].fill_(-2.3)
+    
+    def _grid_predictions(self, x_context, y_context, context_mask=None):
+        """Internal: encode → CNN → split into mean and variance grids."""
+        grid_repr = self.encoder(x_context, y_context, context_mask)
+        out = self.cnn(grid_repr)  # [B, 2*C, H, W]
+        
+        mean_grid = out[:, :self.y_dim]    # [B, C, H, W]
+        logvar_grid = out[:, self.y_dim:]  # [B, C, H, W]
+        
+        logvar_grid = torch.clamp(logvar_grid, min=-7, max=7)
+        variance_grid = torch.exp(logvar_grid) + 1e-3
+        
+        return mean_grid, variance_grid
+    
+    def _index_grid(self, grid, x_target):
+        """
+        Extract values from a [B, C, H, W] grid at target coordinates.
+        
+        Dataset coords: col_idx / W, row_idx / H  →  multiply back to get index.
+        """
+        batch_size = x_target.size(0)
+        
+        target_col = (x_target[..., 0] * self.img_w).round().long().clamp(0, self.img_w - 1)
+        target_row = (x_target[..., 1] * self.img_h).round().long().clamp(0, self.img_h - 1)
+        
+        flat_idx = target_row * self.img_w + target_col  # [B, N_t]
+        flat_idx = flat_idx.unsqueeze(1).expand(-1, self.y_dim, -1)  # [B, C, N_t]
+        
+        grid_flat = grid.reshape(batch_size, self.y_dim, -1)  # [B, C, H*W]
+        values = torch.gather(grid_flat, 2, flat_idx)  # [B, C, N_t]
+        
+        return values.permute(0, 2, 1)  # [B, N_t, C]
+    
+    def forward(self, x_context, y_context, x_target, context_mask=None):
+        """
+        Args:
+            x_context:    [B, N_c, 2]
+            y_context:    [B, N_c, C]
+            x_target:     [B, N_t, 2]
+            context_mask: [B, N_c] optional (1=valid, 0=padding)
+        
+        Returns:
+            mean:     [B, N_t, C]
+            variance: [B, N_t, C]
+        """
+        mean_grid, variance_grid = self._grid_predictions(
+            x_context, y_context, context_mask
+        )
+        
+        mean = self._index_grid(mean_grid, x_target)
+        variance = self._index_grid(variance_grid, x_target)
+        
+        return mean, variance
+    
+    def predict_grid(self, x_context, y_context, context_mask=None):
+        """
+        Full-image prediction for visualization.
+        
+        Returns:
+            mean:     [B, C, H, W]
+            variance: [B, C, H, W]
+        """
+        return self._grid_predictions(x_context, y_context, context_mask)

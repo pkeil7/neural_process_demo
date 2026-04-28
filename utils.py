@@ -4,7 +4,7 @@ Utility functions for visualizing Neural Process predictions.
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from model import NP_model
+from model import NP_model, ConvCNP
 
 
 def plot_mnist_sample(batch, batch_idx=0, model=None, device='cpu'):
@@ -373,7 +373,7 @@ def plot_training_curves(train_losses, val_losses, save_path=None):
     return fig
 
 
-def load_model_from_checkpoint(checkpoint_path, input_dim_x, input_dim_y, hidden_dim, output_dim, device='cpu'):
+def load_model_from_checkpoint(checkpoint_path, input_dim_x, input_dim_y, hidden_dim, output_dim, device='cpu', model_type='ConvCNP'):
     """
     Load a trained Neural Process model from a checkpoint.
     
@@ -387,17 +387,32 @@ def load_model_from_checkpoint(checkpoint_path, input_dim_x, input_dim_y, hidden
     
     Returns:
         Tuple of (model, checkpoint_info)
-            - model: Loaded NP_model in eval mode
+            - model: Loaded ConvCNP model in eval mode
             - checkpoint_info: Dictionary with epoch, losses, etc.
     """
     # Create model with same architecture
-    model = NP_model(
-        input_dim_x=input_dim_x,
-        input_dim_y=input_dim_y,
-        hidden_dim=hidden_dim,
-        output_dim=output_dim
-    )
-    
+
+    if model_type == 'NP_model':
+        model = NP_model(
+            input_dim_x=input_dim_x,
+            input_dim_y=input_dim_y,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim
+        )
+
+    elif model_type == 'ConvCNP':
+
+        model = ConvCNP(
+            img_h=28,
+            img_w=28,
+            y_dim=input_dim_y,
+            hidden_channels=hidden_dim,
+            n_conv_layers=3
+        )
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
+
+
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])

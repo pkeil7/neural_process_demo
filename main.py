@@ -3,7 +3,7 @@ from time import time
 import torch
 import torch.optim as optim
 import numpy as np
-from model import NP_model
+from model import ConvCNP, NP_model
 from dataset import get_image_dataloader
 from train import train
 
@@ -20,7 +20,7 @@ def main():
         'num_workers': 4,
         'input_dim_x': 2,             # 2D coordinates (x, y)
         'input_dim_y': 1,             # Grayscale (1 for MNIST, 3 for CIFAR10)
-        'hidden_dim': 128*3,
+        'hidden_dim': 64,
         'output_dim': 1,              # Prediction dimension (1 for MNIST, 3 for CIFAR10)
         'learning_rate': 5e-4,
         'num_epochs': 50,
@@ -30,7 +30,7 @@ def main():
 
     import time
     timestamp = time.strftime("%d_%b_%Y_%H:%M:%S", time.localtime())
-    model_name = f"NP_model_{timestamp}.pt"
+    model_name = f"ConvCNP_model_{timestamp}.pt"
     
     # Set random seed for reproducibility
     torch.manual_seed(config['seed'])
@@ -61,11 +61,19 @@ def main():
     
     # Create model
     print("\nCreating model...")
-    model = NP_model(
-        input_dim_x=config['input_dim_x'],
-        input_dim_y=config['input_dim_y'],
-        hidden_dim=config['hidden_dim'],
-        output_dim=config['output_dim']
+    #model = NP_model(
+    #    input_dim_x=config['input_dim_x'],
+    #    input_dim_y=config['input_dim_y'],
+    #    hidden_dim=config['hidden_dim'],
+    #    output_dim=config['output_dim']
+    #)
+
+    model = ConvCNP(
+        28,
+        28,
+        y_dim = config['input_dim_y'],
+        hidden_channels=config['hidden_dim'],
+        n_conv_layers=3
     )
     model = model.to(device)
     
