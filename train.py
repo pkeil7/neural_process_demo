@@ -132,7 +132,8 @@ def train(
     device,
     num_epochs,
     save_dir='checkpoints',
-    save_every=10
+    save_every=10,
+    model_name='best_model.pt'
 ):
     """
     Full training loop.
@@ -181,7 +182,7 @@ def train(
                 'optimizer_state_dict': optimizer.state_dict(),
                 'train_loss': train_loss,
                 'val_loss': val_loss,
-            }, os.path.join(save_dir, 'best_model.pt'))
+            }, os.path.join(save_dir, model_name))
             print(f"  → Saved best model (val_loss: {val_loss:.6f})")
         
         # Save periodic checkpoint
