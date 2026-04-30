@@ -141,6 +141,8 @@ class SetConvEncoder(nn.Module):
             x_context: [B, N, 2] context coordinates
             y_context: [B, N, C] context values
             context_mask: [B, N] optional mask (1=valid, 0=padding)
+
+        Here B is batch size, N is number of context points, C is number of signal channels (e.g. 1 for grayscale).
         
         Returns:
             grid_repr: [B, C+1, H, W] grid with signal + density channels
@@ -150,7 +152,7 @@ class SetConvEncoder(nn.Module):
         # Grid points flattened: [H*W, 2]
         grid_flat = self.grid.reshape(-1, 2)
         
-        # Pairwise squared distances: [B, H*W, N]
+        # Pairwise squared distances between grid points H*W and context points N: [B, H*W, N]
         # grid_flat[None, :, None, :] → [1, H*W, 1, 2]
         # x_context[:, None, :, :]   → [B, 1,   N, 2]
         sq_dist = ((grid_flat[None, :, None, :] - x_context[:, None, :, :]) ** 2).sum(-1)
@@ -162,9 +164,12 @@ class SetConvEncoder(nn.Module):
             weights = weights * context_mask.unsqueeze(1)  # mask out padded points
         
         # Signal channels: Σ w_i * y_i → [B, H*W, C]
+        # matrix multiply weights [B, H*W, N] with y_context [B, N, C] → [B, H*W, C]
+        # apply weights to y_context to get weighted sum of context values at each grid point
         signal = torch.bmm(weights, y_context)
         
         # Density channel: Σ w_i → [B, H*W, 1]
+        # sum weights to get density at each grid point
         density = weights.sum(-1, keepdim=True)
         
         # Combine and reshape to [B, C+1, H, W]
@@ -212,7 +217,9 @@ class ConvCNP(nn.Module):
         final_conv.bias.data[y_dim:].fill_(-2.3)
     
     def _grid_predictions(self, x_context, y_context, context_mask=None):
-        """Internal: encode → CNN → split into mean and variance grids."""
+        """Internal: encode → CNN → split into mean and variance grids.
+        This contains the learnable parameters of the model.
+        """
         grid_repr = self.encoder(x_context, y_context, context_mask)
         out = self.cnn(grid_repr)  # [B, 2*C, H, W]
         
@@ -228,7 +235,9 @@ class ConvCNP(nn.Module):
         """
         Extract values from a [B, C, H, W] grid at target coordinates.
         
-        Dataset coords: col_idx / W, row_idx / H  →  multiply back to get index.
+        Dataset coords: col_idx / W, row_idx / H  →  multiply back to get index for all targets in batch Nt.
+
+        Basically just a helper function that does grid indexing for the forward pass and does not contain any learnable parameters.
         """
         batch_size = x_target.size(0)
         
